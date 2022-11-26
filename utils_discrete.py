@@ -141,15 +141,15 @@ def getDiscrStationaryBounds(policy, rewards, P, p_ksi, Y_states, gamma, T = 100
         if len(upper_list) > 2:
             norm_upper = np.linalg.norm(upper_list[-2] - upper_list[-1])
             #norm_lower = np.linalg.norm(lower_list[-2] - lower_list[-1])
-            
+
             if norm_upper < eps:
                 print("Norm upper:", norm_upper)
                 #print("Norm lower:", norm_lower)
                 break
-            
+
             norm_list_upper.append(norm_upper)
             #norm_list_lower.append(norm_lower)
-            
+
             if plotNorm:
                 clear_output(wait=True)
                 fig = plt.figure(figsize=(8, 7))
