@@ -1,6 +1,0 @@
-README.md
-setup.py
-libUVIP.egg-info/PKG-INFO
-libUVIP.egg-info/SOURCES.txt
-libUVIP.egg-info/dependency_links.txt
-libUVIP.egg-info/top_level.txt
