@@ -186,7 +186,7 @@ def TabularReinforce(env, gamma, save_path=None, n_iters=40000, lr=0.01, eps_uvi
             prev_upper = upper
 
             err = np.max(np.abs(upper - Vstar))
-            print(f"Error if upper bounds at episode {episode}/{n_iters} is {err}")
+            print(f"Error of upper bounds at episode {episode}/{n_iters} is {err}")
             norm_history.append(np.max(np.abs(upper - Vstar)))
             norm_history_policy.append(np.max(np.abs(Vpi - Vstar)))
 
@@ -202,7 +202,7 @@ def TabularReinforce(env, gamma, save_path=None, n_iters=40000, lr=0.01, eps_uvi
             ax.tick_params(axis="y", labelsize=35)
             plt.legend(fontsize=30)
             plt.tight_layout()
-            plt.savefig(save_path[:-4] + f"_{episode}.png", pi=fig.dpi)
+            plt.savefig(save_path[:-4] + f"_{episode}.png", dpi=fig.dpi)
             plt.show()
 
     return score

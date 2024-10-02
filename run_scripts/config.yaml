@@ -1,5 +1,5 @@
 envs:
-  env: FrozenLake
+  env: WrappedNRoom
 
 alg:
   gamma: 0.9
@@ -7,13 +7,18 @@ alg:
   policy_accuracy: 1e-10
   UVIP_accuracy: 1e-5
   debug: True
-  save_path_reinforce: plots/out_reinforce.png
-  save_path_scores: plots/out_scores.png
-  save_path_UVIP: plots/out_UVIP.png
+  save_path_reinforce: plotsFrozenLake/out_reinforce.png
+  save_path_scores: plotsFrozenLake/out_scores.png
+  save_path_UVIP: plotsFrozenLake/out_UVIP.png
 
 FrozenLake:
   max_steps: 30
   seed: 42
 
 Chain:
+  seed: 42
+
+WrappedNRoom:
+  nrooms: 5
+  room_size: 5
   seed: 42
