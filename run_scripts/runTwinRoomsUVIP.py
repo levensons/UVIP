@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
     # Vpi = runMBQVI(env, gamma)
     Vpi, states, agent = runKernelUCBVI(env, gamma, budget)
-    logger.info(states)
+    # logger.info(states)
     logger.info(f"Number of representative states is {agent.M}")
     logger.info(f"Shape of Vpi is {Vpi.shape}")
     states = states[:agent.M]
@@ -134,10 +134,12 @@ if __name__ == "__main__":
 
     env = WrappedTwinRooms(agent, n_bins=15)
 
-    Vup, norm_list_upper = getMonteCarloUpperBounds(env, states, Vpi, k=3, total_steps=100, M1=500, M2=200, gamma=gamma)
+    Vup, norm_list_upper, relative_err_list_upper, timestamps = getMonteCarloUpperBounds(env, states, Vpi, k=3, total_steps=100, M1=500, M2=200, gamma=gamma)
     np.save(os.path.join(exp_path, "Vpi.npy"), Vpi)
     np.save(os.path.join(exp_path, "Vup.npy"), Vup)
     np.save(os.path.join(exp_path, "ReprStates.npy"), states)
+    np.save(os.path.join(exp_path, "relative_err_hist.npy"), relative_err_list_upper)
+    np.save(os.path.join(exp_path, "timestamps.npy"), timestamps)
 
     logger.info(Vup)
     logger.info(f"Gap between Vup and Vpi is {np.max(np.abs(Vup - Vpi))}")

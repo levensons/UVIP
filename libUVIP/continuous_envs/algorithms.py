@@ -12,6 +12,7 @@ import matplotlib as mpl
 import random
 from tqdm import tqdm_notebook
 import logging
+import time
 
 def generate_samples_given(env, X_samples, N=1):
     device = 'cpu'
@@ -154,7 +155,6 @@ def getMonteCarloUpperBounds(env, X_samples, V_pi, k=4, total_steps=50, M1=150, 
     """
     logger = logging.getLogger('UVIP')
 
-    max_grad_norm = 5000
     loss_history = []
     grad_norm_history = []
     eval_freq = 1
@@ -168,6 +168,7 @@ def getMonteCarloUpperBounds(env, X_samples, V_pi, k=4, total_steps=50, M1=150, 
     V_up_prev = np.copy(V_pi)
     upper_bound_sample = []
     norm_list_upper = []
+    relative_err_list_upper = []
 
     V_mean = np.zeros((n_actions, N, 1))
     for i in range(N):
@@ -179,8 +180,12 @@ def getMonteCarloUpperBounds(env, X_samples, V_pi, k=4, total_steps=50, M1=150, 
     V_mean /= M1
 
     step = 0
+    total_time = 0
+    timestamps = []
     with trange(step, total_steps + 1) as progress_bar:
         for step in progress_bar:
+            start_time = time.time()
+
             Yxa_M2 = np.zeros((n_actions, N, M2, state_dim))
             rewards = np.zeros((n_actions, N, M2))
             for i in range(N):
@@ -200,13 +205,21 @@ def getMonteCarloUpperBounds(env, X_samples, V_pi, k=4, total_steps=50, M1=150, 
             M = V_pi2 - V_mean
             V_up = (rewards + gamma * (V_k - M)).max(axis=0).mean(axis=1)
 
-            logger.info(f"At step {step} we have |Vup-Vpi| = {np.max(np.abs(V_up - V_pi))}")
+            end_time = time.time()
+            execution_time = end_time - start_time
+            total_time += execution_time
+            timestamps.append(total_time)
+
+            logger.info(f"At step {step} we have |Vup-Vpi| = {np.max(np.abs(V_up - V_pi))}, execution time: {total_time:.6f} seconds")
 
             if step >= 1:
                 norm_upper = np.sum((V_up - V_up_prev)**2)**0.5
                 norm_cur = np.sum(V_up**2)**0.5
-                logger.info(f"At step {step} absolute error: {norm_upper}, relative error: {norm_upper / norm_cur}")
+                abs_err = norm_upper
+                relative_err = np.sum(((V_up - V_up_prev) / V_up)**2)**0.5
+                logger.info(f"At step {step} absolute error: {norm_upper}, relative error: {relative_err}")
                 norm_list_upper.append(norm_upper)
+                relative_err_list_upper.append(relative_err)
                 V_up_prev = V_up
 
             if save_fig and step % eval_freq == 0:
@@ -238,7 +251,7 @@ def getMonteCarloUpperBounds(env, X_samples, V_pi, k=4, total_steps=50, M1=150, 
                 if step == total_steps - 1:
                     plt.savefig('pic1.png')
 
-    return V_up, norm_list_upper
+    return V_up, norm_list_upper, relative_err_list_upper, timestamps
 
 
 def plotBounds(V_up, V_pi, X_grid, X_data, ax, params):
