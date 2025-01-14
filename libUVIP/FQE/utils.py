@@ -21,8 +21,9 @@ def prepare_dataset(env, agent_b, agent_e, T, H, n_actions, gamma=0.99):
         for h in range(H):
             action = agent_b.policy(cur_state)
             next_state, reward, done, _ = env.step(action)
-            next_score = np.zeros(n_actions, dtype=np.float32)
-            next_score[agent_e.policy(next_state)] = 1
+            next_score = agent_e.score(next_state)
+            # next_score = np.zeros(n_actions, dtype=np.float32)
+            # next_score[agent_e.policy(next_state)] = 1
 
             states.append(cur_state)
             rewards.append(reward)

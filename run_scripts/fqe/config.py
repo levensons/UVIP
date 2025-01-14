@@ -32,7 +32,7 @@ def get_config(alg_type):
                     "min_dist": 0.05
                 }
             ),
-            "budget": 2500, #2500
+            "budget": 5000, #2500
             "gamma": 0.99
         }
     )
@@ -51,23 +51,23 @@ def get_config(alg_type):
 
     config.optim_conf = config_dict.ConfigDict(
         {
-            "lr": 3e-4,
+            "lr": 0.0003,
             "weight_decay": 1e-4
         }
     )
 
     config.fqe_params = config_dict.ConfigDict(
         {
-            "n_epochs": 250,
-            "hidden_size": 256,
-            "bs": 256
+            "n_epochs": 400, #250
+            "hidden_size": 32,
+            "bs": 32
         }
     )
 
     config.gamma = 0.99
     config.device = device
-    config.seed = 42 # 3, 9, 
-    config.T = 1000
+    config.seeds = [3, 9, 33, 42, 1812] # [3, 9, 33, 42, 1812]
+    config.T = 25
     config.H = 100
 
     config.alg_type = alg_type

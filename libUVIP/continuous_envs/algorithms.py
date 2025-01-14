@@ -216,7 +216,7 @@ def getMonteCarloUpperBounds(env, X_samples, V_pi, k=4, total_steps=50, M1=150, 
                 norm_upper = np.sum((V_up - V_up_prev)**2)**0.5
                 norm_cur = np.sum(V_up**2)**0.5
                 abs_err = norm_upper
-                relative_err = np.sum(((V_up - V_up_prev) / V_up)**2)**0.5
+                relative_err = np.mean(((V_up - V_up_prev) / V_up)**2)**0.5
                 logger.info(f"At step {step} absolute error: {norm_upper}, relative error: {relative_err}")
                 norm_list_upper.append(norm_upper)
                 relative_err_list_upper.append(relative_err)

@@ -15,13 +15,16 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from pathlib import Path
 
 from sklearn.linear_model import LogisticRegression
 from concurrent.futures import ProcessPoolExecutor
 from libUVIP.FQE.fqe import RLDatasetOffline, FQE
 from libUVIP.FQE.utils import prepare_dataset
+from libUVIP.FQE.agents import RandomAgent, EpsGreedy
 from rlberry.agents import RSKernelUCBVIAgent
 from rlberry.envs.benchmarks.generalization.twinrooms import TwinRooms
+from rlberry.seeding import Seeder, safe_reseed
 # os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 import logging
@@ -29,8 +32,7 @@ import wandb
 
 import pandas as pd
 
-def eval_agent(env, agent, gamma, repr_states, n_sim=100):
-    horizon = int(1 / (1 - gamma))
+def eval_agent(env, agent, gamma, horizon, repr_states, n_sim=30):
     total_rewards = []
     for state in tqdm(repr_states):
         total_reward = 0
@@ -49,41 +51,54 @@ def eval_agent(env, agent, gamma, repr_states, n_sim=100):
 
     return total_rewards
 
-def main(_):
-    args = FLAGS.config
-
+def run_exp(args, seed):
     device = args.device
-    seed = args.seed
-
-    random.seed(seed)            # Python random module
-    np.random.seed(seed)         # NumPy random module
-    torch.manual_seed(seed)      # PyTorch CPU
-    torch.cuda.manual_seed(seed) # PyTorch GPU
-
     logger = logging.getLogger("fqe")
-    fh = logging.FileHandler(f'logs/run_fqe_{seed}.log')
-    fh.setLevel(logging.INFO) # or any level you want
-    logger.addHandler(fh)
 
-    exp_path = "./saved_values/"
+    seeder = Seeder(seed)
+
+    exp_path = f"./saved_values{args.config_e.budget}_{seed}/"
+    os.makedirs(exp_path, exist_ok=True)
 
     fqe_w_path = f"./saved_fqes/fqe{args.alg_type}.pt"
 
     env = TwinRooms()
+    safe_reseed(env, seeder)
 
     n_actions = 4
 
-    agent_b = RSKernelUCBVIAgent(env, args.config_b.gamma, **args.config_b.params)
-    agent_b.fit(args.config_b.budget)
+    # agent_b = RSKernelUCBVIAgent(env, args.config_b.gamma, **args.config_b.params)
+    # agent_b.fit(args.config_b.budget)
+    # agent_b = RandomAgent(n_actions)
 
-    agent_e = RSKernelUCBVIAgent(env, args.config_e.gamma, **args.config_e.params)
-    agent_e.fit(args.config_e.budget)
+    agent_path = Path(exp_path + "agent_e").with_suffix(".pickle")
+    if os.path.exists(agent_path):
+        agent_e_kwargs = {"env": env, "gamma": args.config_e.gamma}
+        agent_e = RSKernelUCBVIAgent.load(agent_path, **agent_e_kwargs, **args.config_e.params)
+        safe_reseed(agent_e, seeder)
+    else:
+        agent_e = RSKernelUCBVIAgent(env, args.config_e.gamma, **args.config_e.params)
+        safe_reseed(agent_e, seeder)
+        agent_e.fit(args.config_e.budget)
+        agent_e.save(agent_path)
 
-    rewards_agent_b = eval_agent(env, agent_b, args.gamma, agent_b.representative_states[:agent_b.M])
-    rewards_agent_e = eval_agent(env, agent_e, args.gamma, agent_b.representative_states[:agent_b.M])
+    repr_states = agent_e.representative_states[:agent_e.M]
+
+    Vpi = agent_e.V[0, :]
+    np.save(exp_path + f"Vpi_agent_e.npy", Vpi)
+
+    agent_b = EpsGreedy(agent_e, n_actions, 0.25)
+    agent_e = EpsGreedy(agent_e, n_actions, 0.1)
+
+    rewards_agent_e = eval_agent(env, agent_e, args.gamma, args.H, repr_states)
+    rewards_agent_b = eval_agent(env, agent_b, args.gamma, args.H, repr_states)
+    logger.info(rewards_agent_b)
     logger.info(rewards_agent_e)
-    np.save(exp_path + f"rewards_agent_b_{seed}.npy", rewards_agent_b)
-    np.save(exp_path + f"rewards_agent_e_{seed}.npy", rewards_agent_e)
+    np.save(exp_path + f"rewards_agent_b.npy", rewards_agent_b)
+    np.save(exp_path + f"rewards_agent_e.npy", rewards_agent_e)
+
+    reward_init_states = eval_agent(env, agent_e, args.gamma, args.H, [np.array([0.1, 0.1]), np.array([1.1, 0.1])], n_sim=100)
+    logger.info(reward_init_states)
 
     states,\
     initial_states,\
@@ -113,7 +128,7 @@ def main(_):
         "optim_conf": args.optim_conf,
         "n_epochs": args.fqe_params.n_epochs,
         "initial_states": initial_states,
-        "repr_states": agent_b.representative_states[:agent_b.M],
+        "repr_states": repr_states,
         "state_dim": state_dim,
         "n_actions": n_actions,
         "hidden_size": args.fqe_params.hidden_size,
@@ -124,13 +139,28 @@ def main(_):
 
     fqe = FQE(**fqe_config)
 
-    values, relative_err_hist, timestamps = fqe.train(batch_size=args.fqe_params.bs, plot_info=True)
+    values, repr_values, relative_err_hist, timestamps = fqe.train(batch_size=args.fqe_params.bs, plot_info=True)
 
     torch.save(fqe.q.state_dict(), fqe_w_path)
 
-    np.save(exp_path + f"values_{seed}.npy", values)
-    np.save(exp_path + f"relative_err_hist_{seed}.npy", relative_err_hist)
-    np.save(exp_path + f"timestamps_{seed}.npy", timestamps)
+    np.save(exp_path + f"values.npy", values)
+    np.save(exp_path + f"repr_values.npy", repr_values)
+    np.save(exp_path + f"relative_err_hist.npy", relative_err_hist)
+    np.save(exp_path + f"timestamps.npy", timestamps)
+
+def main(_):
+    args = FLAGS.config
+
+    device = args.device
+    seeds = args.seeds
+
+    logger = logging.getLogger("fqe")
+    fh = logging.FileHandler(f'logs/run_fqe.log')
+    fh.setLevel(logging.INFO) # or any level you want
+    logger.addHandler(fh)
+
+    for seed in seeds:
+        run_exp(args, seed)
 
 
 if __name__ == '__main__':

@@ -29,15 +29,23 @@ class QNetwork(nn.Module):
         self.hidden_size = hidden_size
 
         self.fc1 = nn.Linear(state_dim, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc2_1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2_2 = nn.Linear(hidden_size, hidden_size)
+        # self.fc2_3 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, n_actions)
-        self.relu = nn.ReLU()
+        # self.linear = nn.Linear(state_dim, n_actions)
+        self.activation = nn.ReLU()
+        # self.activation = nn.Identity()
 
     def forward(self, state):
         x = state
 
-        q_vals = self.relu(self.fc1(x))
-        q_vals = self.relu(self.fc2(q_vals))
+        # q_vals = self.linear(x)
+        q_vals = self.activation(self.fc1(x))
+        q_vals = self.activation(self.fc2_1(q_vals))
+        q_vals = self.activation(self.fc2_2(q_vals))
+        # q_vals = self.activation(self.fc2_3(q_vals))
+        # q_vals = self.relu(self.fc2(q_vals))
         q_vals = self.fc3(q_vals)
 
         return q_vals
@@ -212,7 +220,7 @@ class FQE:
 
             logger.info(f"Finished Epoch {epoch}.")
 
-        return values, relative_err_hist, timestamps
+        return values, repr_vals_cur, relative_err_hist, timestamps
 
 
     def predict(self, states, actions):

@@ -8,16 +8,17 @@ from tqdm import tqdm
 import rlberry
 from rlberry.envs.benchmarks.generalization.twinrooms import TwinRooms
 from rlberry.wrappers.discretize_state import DiscretizeStateWrapper
+from rlberry.agents.kernel_based.common import map_to_representative
 import random
 
 class WrappedTwinRooms:
-    def __init__(self, agent, noise_room1=0.01, noise_room2=0.01, n_bins=20, seed=42):
+    def __init__(self, params, noise_room1=0.01, noise_room2=0.01, n_bins=20, seed=42):
         np.random.seed(seed)
 
         self.noise_room1 = noise_room1
         self.noise_room2 = noise_room2
         self.n_bins = n_bins
-        self.agent = agent
+        self.params = params
 
         env_ctor = TwinRooms
         env_kwargs = dict(
@@ -37,8 +38,8 @@ class WrappedTwinRooms:
 
     def sample_discrete(self, state, action):
         next_state, reward, _, _ = self.env.sample(state, action)
-
-        return self.agent._map_to_repr(next_state, False), reward
+        next_state_repr = map_to_representative(next_state, **self.params)
+        return next_state_repr, reward
 
     def sample_cont(self, state, action):
         next_state, reward, _, _ = self.env.sample(state, action)

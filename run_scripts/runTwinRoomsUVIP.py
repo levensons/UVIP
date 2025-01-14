@@ -2,7 +2,7 @@ import gym
 import numpy as np
 import time, os
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import pandas as pd
 import seaborn as sns
 import pandas as pd
@@ -19,11 +19,13 @@ from rlberry.manager import AgentManager, MultipleManagers, evaluate_agents
 from rlberry.envs.benchmarks.generalization.twinrooms import TwinRooms
 from rlberry.agents.mbqvi import MBQVIAgent
 from rlberry.wrappers.discretize_state import DiscretizeStateWrapper
-from rlberry.seeding import Seeder
+from rlberry.seeding import Seeder, safe_reseed
 from rlberry.agents import RSKernelUCBVIAgent, RSKernelUCBVIAgent
 from libUVIP.continuous_envs.envs.envs import WrappedTwinRooms
 from libUVIP.continuous_envs.algorithms import getMonteCarloUpperBounds
+from libUVIP.FQE.agents import RandomAgent, EpsGreedy
 import logging
+from pathlib import Path
 
 # plt.rcParams["mathtext.fontset"] = True
 # sns.set(style="darkgrid")
@@ -65,8 +67,29 @@ def runMBQVI(env, gamma):
     logger.info(Vpi)
     return Vpi
 
-def runKernelUCBVI(env, gamma, budget):
+def eval_agent(env, agent, gamma, horizon, repr_states, n_sim=50):
+    total_rewards = []
+    for state in tqdm(repr_states):
+        total_reward = 0
+        for i in range(n_sim):
+            cur_state = state
+            total_gamma = 1
+            for h in range(horizon):
+                action = agent.policy(cur_state)
+                next_state, reward, done, info = env.sample(cur_state, action)
+                total_reward += total_gamma * reward
+                total_gamma *= gamma
+
+                cur_state = next_state
+
+        total_rewards.append(total_reward / n_sim)
+
+    return total_rewards
+
+def runKernelUCBVI(env, gamma, budget, seeder):
+    logger = logging.getLogger('UVIP')
     agent = RSKernelUCBVIAgent(env, gamma, kernel_type="gaussian", max_repr=500, beta=0.01, bandwidth=0.025, min_dist=0.05)
+    safe_reseed(agent, seeder)
     logger.info("Created KernelUCBVI!")
     logger.info("fitting...")
     agent.fit(budget)
@@ -104,8 +127,9 @@ def runKernelUCBVI(env, gamma, budget):
 
     return Vpi, repr_states, agent
 
-if __name__ == "__main__":
-    exp_path = "./TwinRoomsExp5"
+def run_exp(seed, budget):
+    exp_path = f"./TwinRoomsExp{budget}_{seed}/"
+    os.makedirs(exp_path, exist_ok=True)
 
     logger = logging.getLogger('UVIP')
     logger.setLevel(logging.INFO)
@@ -118,21 +142,45 @@ if __name__ == "__main__":
     # add the handlers to logger
     logger.addHandler(fh)
 
-    seeder = Seeder(123)
+    seeder = Seeder(seed)
     gamma = 0.99
-    budget = 2500
+    horizon = 100
+    n_actions = 4
+    params = dict(kernel_type="gaussian", max_repr=500, beta=0.01, bandwidth=0.025, min_dist=0.05)
 
     env = TwinRooms()
+    safe_reseed(env, seeder)
 
     # Vpi = runMBQVI(env, gamma)
-    Vpi, states, agent = runKernelUCBVI(env, gamma, budget)
-    # logger.info(states)
-    logger.info(f"Number of representative states is {agent.M}")
-    logger.info(f"Shape of Vpi is {Vpi.shape}")
-    states = states[:agent.M]
-    Vpi = Vpi[:agent.M]
 
-    env = WrappedTwinRooms(agent, n_bins=15)
+    agent_path = Path(exp_path + "agent").with_suffix(".pickle")
+    if os.path.exists(agent_path):
+        agent_kwargs = {"env": env, "gamma": gamma}
+        agent = RSKernelUCBVIAgent.load(agent_path, **agent_kwargs, **params)
+        safe_reseed(agent, seeder)
+    else:
+        _, states, agent = runKernelUCBVI(env, gamma, budget, seeder)
+        agent.save(agent_path)
+
+    states = agent.representative_states[:agent.M]
+    logger.info(f"Number of representative states is {agent.M}")
+
+    params = {"lp_metric": agent.lp_metric,
+              "representative_states": states,
+              "n_representatives": agent.M,
+              "min_dist": agent.min_dist,
+              "scaling": agent.scaling,
+              "accept_new_repr": False}
+
+    agent = EpsGreedy(agent, n_actions, 0.1)
+    Vpi = np.array(eval_agent(env, agent, gamma, horizon, states))
+
+    # logger.info(states)
+    logger.info(f"Shape of Vpi is {Vpi.shape}")
+    # states = states[:agent.M]
+    # Vpi = Vpi[:agent.M]
+
+    env = WrappedTwinRooms(params, n_bins=15) # 15
 
     Vup, norm_list_upper, relative_err_list_upper, timestamps = getMonteCarloUpperBounds(env, states, Vpi, k=3, total_steps=100, M1=500, M2=200, gamma=gamma)
     np.save(os.path.join(exp_path, "Vpi.npy"), Vpi)
@@ -156,6 +204,12 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(exp_path, "outTwinRooms.png"))
     plt.show()
 
+if __name__ == "__main__":
+    seeds = [3, 9, 33, 42, 1812]
+    budget = 1250 #2500, 1250
+
+    for seed in seeds:
+        run_exp(seed, budget)
 
 
 
